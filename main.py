@@ -1,36 +1,21 @@
 import telebot
 from telebot import types
 import os
-from threading import Thread
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+import time
 
 BOT_TOKEN = os.environ['BOT_TOKEN']
 ADMIN_ID = 75271120
+VIDEO_FILE_ID = "BQACAgIAAxkBAAMXaZC5Xdtc0IFrpOwZy_CdVYxVVkAAAjKQAAIlYYlIM817HLFrmNE6BA"
 
 bot = telebot.TeleBot(BOT_TOKEN)
-
 pending_payments = {}
-
-# Веб-сервер чтобы бот не засыпал
-class MyHandler(SimpleHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"Bot is running!")
-    def log_message(self, format, *args):
-        pass
-
-def run_server():
-    server = HTTPServer(('0.0.0.0', 8080), MyHandler)
-    server.serve_forever()
-
-Thread(target=run_server, daemon=True).start()
 
 def get_main_keyboard():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
     markup.add(
         types.KeyboardButton("🎬 Купить видеокурс"),
         types.KeyboardButton("📦 Купить коробку"),
+        types.KeyboardButton("📢 Новости"),
         types.KeyboardButton("✉️ Написать автору")
     )
     return markup
@@ -45,16 +30,29 @@ def start(message):
         "Пошаговая инструкция: подготовка, вход, голодание, выход.\n\n"
         "📦 *Коробка для голодания* — всё необходимое для курса "
         "собрано в одной коробке. Доставка по всей России.\n\n"
+        "📢 *Новости* — наш Telegram-канал с полезными материалами.\n\n"
         "Выберите что вас интересует — кнопки внизу 👇",
         parse_mode="Markdown",
         reply_markup=get_main_keyboard()
     )
 
+@bot.message_handler(func=lambda m: m.text == "📢 Новости")
+def news_channel(message):
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("📢 Открыть канал", url="https://t.me/doconhunger"))
+    bot.send_message(
+        message.chat.id,
+        "📢 *Канал «Врач на Голоде»*\n\n"
+        "Новости, советы и истории от доктора Александрова.\n"
+        "Подписывайтесь! 👇",
+        parse_mode="Markdown",
+        reply_markup=markup
+    )
+
 @bot.message_handler(func=lambda m: m.text == "🎬 Купить видеокурс")
 def buy_course(message):
     markup = types.InlineKeyboardMarkup(row_width=1)
-    btn_paid = types.InlineKeyboardButton("✅ Я оплатил(а)", callback_data="paid_course")
-    markup.add(btn_paid)
+    markup.add(types.InlineKeyboardButton("✅ Я оплатил(а)", callback_data="paid_course"))
     bot.send_message(
         message.chat.id,
         "🎬 *Видеокурс Голодание с улыбкой*\n\n"
@@ -71,8 +69,7 @@ def buy_course(message):
 @bot.message_handler(func=lambda m: m.text == "📦 Купить коробку")
 def buy_box(message):
     markup = types.InlineKeyboardMarkup(row_width=1)
-    btn_paid = types.InlineKeyboardButton("✅ Я оплатил(а)", callback_data="paid_box")
-    markup.add(btn_paid)
+    markup.add(types.InlineKeyboardButton("✅ Я оплатил(а)", callback_data="paid_box"))
     bot.send_message(
         message.chat.id,
         "📦 *Коробка для голодания*\n\n"
@@ -104,9 +101,10 @@ def paid_course(call):
     user = call.from_user
     username = f"@{user.username}" if user.username else f"{user.first_name}"
     markup_admin = types.InlineKeyboardMarkup(row_width=2)
-    btn_confirm = types.InlineKeyboardButton("✅ Подтвердить", callback_data=f"confirm_course_{user.id}")
-    btn_reject = types.InlineKeyboardButton("❌ Отклонить", callback_data=f"reject_{user.id}")
-    markup_admin.add(btn_confirm, btn_reject)
+    markup_admin.add(
+        types.InlineKeyboardButton("✅ Подтвердить", callback_data=f"confirm_course_{user.id}"),
+        types.InlineKeyboardButton("❌ Отклонить", callback_data=f"reject_{user.id}")
+    )
     bot.send_message(
         ADMIN_ID,
         f"💰 *НОВАЯ ОПЛАТА КУРСА!*\n\n"
@@ -114,16 +112,14 @@ def paid_course(call):
         f"🆔 ID: `{user.id}`\n"
         f"💵 Сумма: 2 900 руб\n"
         f"📦 Товар: Видеокурс\n\n"
-        f"Проверьте поступление на карте и нажмите кнопку:",
+        f"Проверьте поступление и нажмите кнопку:",
         parse_mode="Markdown",
         reply_markup=markup_admin
     )
     bot.answer_callback_query(call.id, "Заявка отправлена!")
     bot.send_message(
         call.message.chat.id,
-        "⏳ *Спасибо!*\n\n"
-        "Ваша оплата проверяется. Обычно это занимает несколько минут.\n"
-        "После подтверждения вы получите видеокурс прямо сюда! 🎬",
+        "⏳ *Спасибо!*\n\nОплата проверяется. После подтверждения получите видеокурс! 🎬",
         parse_mode="Markdown",
         reply_markup=get_main_keyboard()
     )
@@ -133,26 +129,25 @@ def paid_box(call):
     user = call.from_user
     username = f"@{user.username}" if user.username else f"{user.first_name}"
     markup_admin = types.InlineKeyboardMarkup(row_width=2)
-    btn_confirm = types.InlineKeyboardButton("✅ Подтвердить", callback_data=f"confirm_box_{user.id}")
-    btn_reject = types.InlineKeyboardButton("❌ Отклонить", callback_data=f"reject_{user.id}")
-    markup_admin.add(btn_confirm, btn_reject)
+    markup_admin.add(
+        types.InlineKeyboardButton("✅ Подтвердить", callback_data=f"confirm_box_{user.id}"),
+        types.InlineKeyboardButton("❌ Отклонить", callback_data=f"reject_{user.id}")
+    )
     bot.send_message(
         ADMIN_ID,
         f"💰 *НОВАЯ ОПЛАТА КОРОБКИ!*\n\n"
         f"👤 Клиент: {username}\n"
         f"🆔 ID: `{user.id}`\n"
         f"💵 Сумма: 2 000 руб\n"
-        f"📦 Товар: Коробка для голодания\n\n"
-        f"Проверьте поступление на карте и нажмите кнопку:",
+        f"📦 Товар: Коробка\n\n"
+        f"Проверьте поступление и нажмите кнопку:",
         parse_mode="Markdown",
         reply_markup=markup_admin
     )
     bot.answer_callback_query(call.id, "Заявка отправлена!")
     bot.send_message(
         call.message.chat.id,
-        "⏳ *Спасибо!*\n\n"
-        "Ваша оплата проверяется.\n"
-        "После подтверждения мы попросим адрес доставки 📬",
+        "⏳ *Спасибо!*\n\nОплата проверяется. После подтверждения попросим адрес 📬",
         parse_mode="Markdown",
         reply_markup=get_main_keyboard()
     )
@@ -162,22 +157,18 @@ def confirm_course(call):
     user_id = int(call.data.split("_")[2])
     bot.send_message(
         user_id,
-        "✅ *Оплата подтверждена!*\n\n"
-        "🎬 Вот ваш видеокурс! Приятного просмотра!",
+        "✅ *Оплата подтверждена!*\n\n🎬 Вот ваш видеокурс! Приятного просмотра!",
         parse_mode="Markdown",
         reply_markup=get_main_keyboard()
     )
-    # Отправляем видео
     try:
-        with open("course_video.mp4", "rb") as video:
-            bot.send_video(user_id, video, caption="🎬 Видеокурс: Голодание с улыбкой\n\nДоктор Александров")
-    except:
-        bot.send_message(user_id, "📹 Видео скоро будет отправлено! Ожидайте.")
-        bot.send_message(ADMIN_ID, f"⚠️ Не удалось отправить видео клиенту {user_id}. Файл course_video.mp4 не найден!")
+        bot.send_document(user_id, VIDEO_FILE_ID, caption="🎬 Видеокурс: Голодание с улыбкой\nДоктор Александров")
+    except Exception as e:
+        bot.send_message(ADMIN_ID, f"⚠️ Ошибка отправки видео: {e}")
     bot.edit_message_text(
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
-        text=f"✅ Курс подтвержден и видео отправлено клиенту {user_id}"
+        text=f"✅ Курс подтвержден и отправлен клиенту {user_id}"
     )
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("confirm_box_"))
@@ -186,9 +177,7 @@ def confirm_box(call):
     pending_payments[user_id] = "waiting_address"
     bot.send_message(
         user_id,
-        "✅ *Оплата подтверждена!*\n\n"
-        "📬 Напишите ваш адрес доставки и ФИО получателя:\n\n"
-        "Просто отправьте текстом в этот чат 👇",
+        "✅ *Оплата подтверждена!*\n\n📬 Напишите адрес доставки и ФИО получателя:",
         parse_mode="Markdown"
     )
     bot.edit_message_text(
@@ -202,9 +191,7 @@ def reject_payment(call):
     user_id = int(call.data.split("_")[1])
     bot.send_message(
         user_id,
-        "❌ *Оплата не найдена*\n\n"
-        "Проверьте реквизиты и попробуйте снова.\n"
-        "Или нажмите «Написать автору» для помощи 👇",
+        "❌ *Оплата не найдена*\n\nПроверьте реквизиты или напишите автору 👇",
         parse_mode="Markdown",
         reply_markup=get_main_keyboard()
     )
@@ -223,58 +210,29 @@ def handle_text(message):
     if pending_payments.get(user_id) == "waiting_address":
         bot.send_message(
             ADMIN_ID,
-            f"📬 *Адрес доставки коробки:*\n\n"
-            f"👤 Клиент: {username}\n"
-            f"🆔 ID: `{user_id}`\n"
-            f"📍 Адрес: {message.text}",
+            f"📬 *Адрес доставки:*\n\n👤 {username}\n🆔 ID: `{user_id}`\n📍 {message.text}",
             parse_mode="Markdown"
         )
-        bot.reply_to(message, "✅ Адрес записан! Свяжемся с вами по доставке! 📦")
+        bot.reply_to(message, "✅ Адрес записан! Свяжемся по доставке! 📦",
+                     reply_markup=get_main_keyboard())
         pending_payments.pop(user_id, None)
         return
 
     if pending_payments.get(user_id) == "waiting_message":
         markup_admin = types.InlineKeyboardMarkup()
-        btn_reply = types.InlineKeyboardButton("💬 Ответить", url=f"tg://user?id={user_id}")
-        markup_admin.add(btn_reply)
+        markup_admin.add(types.InlineKeyboardButton("💬 Ответить", url=f"tg://user?id={user_id}"))
         bot.send_message(
             ADMIN_ID,
-            f"✉️ *Сообщение от клиента:*\n\n"
-            f"👤 От: {username}\n"
-            f"🆔 ID: `{user_id}`\n"
-            f"💬 Текст: {message.text}",
+            f"✉️ *Сообщение от клиента:*\n\n👤 {username}\n🆔 ID: `{user_id}`\n💬 {message.text}",
             parse_mode="Markdown",
             reply_markup=markup_admin
         )
-        bot.reply_to(
-            message,
-            "✅ Сообщение отправлено! Доктор ответит в ближайшее время.",
-            reply_markup=get_main_keyboard()
-        )
+        bot.reply_to(message, "✅ Сообщение отправлено! Доктор ответит в ближайшее время.",
+                     reply_markup=get_main_keyboard())
         pending_payments.pop(user_id, None)
         return
 
-    if user_id == ADMIN_ID and message.reply_to_message:
-        try:
-            text = message.reply_to_message.text
-            if "ID: `" in text:
-                client_id = int(text.split("ID: `")[1].split("`")[0])
-                bot.send_message(
-                    client_id,
-                    f"💬 *Ответ от доктора Александрова:*\n\n{message.text}",
-                    parse_mode="Markdown",
-                    reply_markup=get_main_keyboard()
-                )
-                bot.reply_to(message, "✅ Ответ отправлен клиенту!")
-                return
-        except:
-            pass
-
-    bot.send_message(
-        message.chat.id,
-        "Выберите действие кнопками внизу 👇",
-        reply_markup=get_main_keyboard()
-    )
+    bot.send_message(message.chat.id, "Выберите действие 👇", reply_markup=get_main_keyboard())
 
 print("Bot started!")
 bot.infinity_polling()
