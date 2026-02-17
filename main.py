@@ -1,19 +1,22 @@
 from threading import Thread
 from http.server import HTTPServer, BaseHTTPRequestHandler
+import telebot
+from telebot import types
+import os
+import time
 
 class H(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.end_headers()
+        self.wfile.write(b"Bot is running!")
+    def log_message(self, format, *args):
+        pass
 
 def run():
     HTTPServer(("0.0.0.0", 8080), H).serve_forever()
 
 Thread(target=run, daemon=True).start()
-import telebot
-from telebot import types
-import os
-import time
 
 BOT_TOKEN = os.environ['BOT_TOKEN']
 ADMIN_ID = 75271120
