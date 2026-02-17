@@ -1,3 +1,15 @@
+from threading import Thread
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+class H(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+
+def run():
+    HTTPServer(("0.0.0.0", 8080), H).serve_forever()
+
+Thread(target=run, daemon=True).start()
 import telebot
 from telebot import types
 import os
