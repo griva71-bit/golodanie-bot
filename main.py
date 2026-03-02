@@ -212,7 +212,12 @@ def confirm_box(call):
     pending_payments[user_id] = "waiting_address"
     bot.send_message(
         user_id,
-        "✅ *Оплата подтверждена!*\n\n📬 Напишите адрес доставки и ФИО получателя:",
+        "✅ *Оплата подтверждена!*\n\n"
+        "📬 Скопируйте шаблон, заполните и отправьте *одним сообщением*:\n\n"
+        "ФИО: Иванов Иван Иванович\n"
+        "Город: Москва\n"
+        "Адрес/пункт СДЭК: ул. Ленина 5\n"
+        "Телефон: \+79001234567",
         parse_mode="Markdown")
     bot.edit_message_text(
         chat_id=call.message.chat.id,
