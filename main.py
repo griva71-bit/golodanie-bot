@@ -12,7 +12,7 @@ VIDEO_FILE_ID = "BQACAgIAAxkBAAMXaZC5Xdtc0IFrpOwZy_CdVYxVVkAAAjKQAAIlYYlIM817HLF
 
 bot = telebot.TeleBot(BOT_TOKEN)
 pending_payments = {}
-
+delivery_data = {}
 
 class MyHandler(SimpleHTTPRequestHandler):
 
@@ -209,20 +209,76 @@ def confirm_course(call):
     func=lambda call: call.data.startswith("confirm_box_"))
 def confirm_box(call):
     user_id = int(call.data.split("_")[2])
-    pending_payments[user_id] = "waiting_address"
+    pending_payments[user_id] = "waiting_fio"
     bot.send_message(
         user_id,
-        "✅ *Оплата подтверждена!*\n\n"
-        "📬 Скопируйте шаблон, заполните и отправьте *одним сообщением*:\n\n"
-        "ФИО: Иванов Иван Иванович\n"
-        "Город: Москва\n"
-        "Адрес/пункт СДЭК: ул. Ленина 5\n"
-        "Телефон: \+79001234567",
+        "📦 *Отлично! Оформляем доставку СДЭК.*\n\n"
+        "Вам нужно будет написать:\n"
+        "• ФИО\n"
+        "• Телефон\n"
+        "• Адрес или пункт СДЭК\n\n"
+        "Начнём! Напишите ваше *ФИО:*",
         parse_mode="Markdown")
     bot.edit_message_text(
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
-        text=f"✅ Коробка подтверждена для {user_id}. Ждём адрес.")
+        text=f"✅ Коробка подтверждена для {user_id}. Ждём данные доставки.")
+
+
+@bot.message_handler(
+    func=lambda message: pending_payments.get(message.from_user.id) == "waiting_fio")
+def get_fio(message):
+    user_id = message.from_user.id
+    delivery_data[user_id] = {"fio": message.text}
+    pending_payments[user_id] = "waiting_phone"
+    bot.send_message(
+        user_id,
+        f"✅ *ФИО:* {message.text}\n\n"
+        "Теперь напишите ваш *телефон:*",
+        parse_mode="Markdown")
+
+
+@bot.message_handler(
+    func=lambda message: pending_payments.get(message.from_user.id) == "waiting_phone")
+def get_phone(message):
+    user_id = message.from_user.id
+    delivery_data[user_id]["phone"] = message.text
+    pending_payments[user_id] = "waiting_address"
+    bot.send_message(
+        user_id,
+        f"✅ *Телефон:* {message.text}\n\n"
+        "Теперь напишите *адрес или пункт СДЭК:*",
+        parse_mode="Markdown")
+
+
+@bot.message_handler(
+    func=lambda message: pending_payments.get(message.from_user.id) == "waiting_address")
+def get_address(message):
+    user_id = message.from_user.id
+    delivery_data[user_id]["address"] = message.text
+    fio = delivery_data[user_id]["fio"]
+    phone = delivery_data[user_id]["phone"]
+    address = message.text
+
+    bot.send_message(
+        user_id,
+        f"✅ *Данные приняты! Ожидайте отправку.*\n\n"
+        f"👤 ФИО: {fio}\n"
+        f"📞 Телефон: {phone}\n"
+        f"📍 Адрес СДЭК: {address}",
+        parse_mode="Markdown")
+
+    bot.send_message(
+        ADMIN_ID,
+        f"📬 *Новый заказ на доставку!*\n\n"
+        f"👤 ФИО: {fio}\n"
+        f"📞 Телефон: {phone}\n"
+        f"📍 Адрес СДЭК: {address}\n"
+        f"🆔 ID покупателя: {user_id}",
+        parse_mode="Markdown")
+
+    pending_payments.pop(user_id, None)
+    delivery_data.pop(user_id, None)
 
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("reject_"))
