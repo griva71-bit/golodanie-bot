@@ -274,7 +274,11 @@ def reject_payment(call):
         message_id=call.message.message_id,
         text=f"❌ Отклонено для {user_id}")
 
-
+@bot.message_handler(content_types=['video', 'document'])
+def get_file_id(message):
+    if message.from_user.id == ADMIN_ID:
+        fid = message.video.file_id if message.video else message.document.file_id
+        bot.send_message(ADMIN_ID, f"`{fid}`", parse_mode="Markdown")
 @bot.message_handler(func=lambda message: True)
 def handle_text(message):
     user = message.from_user
