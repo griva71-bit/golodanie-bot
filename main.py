@@ -8,14 +8,12 @@ from urllib.request import urlopen
 
 BOT_TOKEN = os.environ['BOT_TOKEN']
 ADMIN_ID = 75271120
-VIDEO_FILE_ID = "BQACAgIAAxkBAAMXaZC5Xdtc0IFrpOwZy_CdVYxVVkAAAjKQAAIlYYlIM817HLFrmNE6BA"
 
-# СТАРЫЕ РЕКВИЗИТЫ (сохранено):
-# 💳 2202 2081 3882 1575
-# Получатель: Вячеслав Юрьевич А.
+VIDEO_SHORT_FILE_ID = "BAACAgIAAxkBAAPbac2AEGt9Cq9W7kTFgBvtnGCK-eAAAtOPAAL3GHBKfKndY7V27MM6BA"
+VIDEO_FULL_FILE_ID = "BAACAgIAAxkBAAPWac1w70dDBbzInRVOEstQwJZzTIUAAhu2AAL3GGhKVGZsJtSHGnY6BA"
 
-YOOMONEY_COURSE = "https://yoomoney.ru/quickpay/confirm?receiver=4100118420031768&quickpay-form=donate&sum=2900&label=course"
-YOOMONEY_BOX = "https://yoomoney.ru/quickpay/confirm?receiver=4100118420031768&quickpay-form=donate&sum=2000&label=box"
+YOOMONEY_COURSE = "https://yoomoney.ru/quickpay/confirm?receiver=4100118420031768&quickpay-form=donate&sum=3900&label=course"
+YOOMONEY_BOX = "https://yoomoney.ru/quickpay/confirm?receiver=4100118420031768&quickpay-form=donate&sum=2900&label=box"
 
 bot = telebot.TeleBot(BOT_TOKEN)
 pending_payments = {}
@@ -66,6 +64,9 @@ def start(message):
         "📦 *Коробка для голодания* — всё необходимое для курса "
         "собрано в одной коробке. Доставка по всей России.\n\n"
         "📢 *Новости* — наш Telegram-канал с полезными материалами.\n\n"
+        "⚠️ *Дисклеймер:* Все материалы носят исключительно "
+        "информационный характер и не являются медицинской рекомендацией. "
+        "Перед применением проконсультируйтесь с врачом.\n\n"
         "Выберите что вас интересует — кнопки внизу 👇",
         parse_mode="Markdown",
         reply_markup=get_main_keyboard())
@@ -87,13 +88,16 @@ def news_channel(message):
 def buy_course(message):
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(
-        types.InlineKeyboardButton("💳 Оплатить 2 900 руб", url=YOOMONEY_COURSE),
+        types.InlineKeyboardButton("💳 Оплатить 3 900 руб", url=YOOMONEY_COURSE),
         types.InlineKeyboardButton("✅ Я оплатил(а)", callback_data="paid_course")
     )
     bot.send_message(
         message.chat.id,
         "🎬 *Видеокурс Голодание с улыбкой*\n\n"
-        "Стоимость: *2 900 руб*\n\n"
+        "Стоимость: *3 900 руб*\n\n"
+        "⚠️ *Дисклеймер:* Материалы курса носят исключительно "
+        "информационный характер и не являются медицинской рекомендацией. "
+        "Перед применением проконсультируйтесь с врачом.\n\n"
         "1️⃣ Нажмите *«Оплатить»* — откроется форма оплаты\n"
         "2️⃣ Оплатите картой или из кошелька\n"
         "3️⃣ Вернитесь сюда и нажмите *«Я оплатил(а)»*\n\n"
@@ -106,15 +110,15 @@ def buy_course(message):
 def buy_box(message):
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(
-        types.InlineKeyboardButton("💳 Оплатить 2 000 руб", url=YOOMONEY_BOX),
+        types.InlineKeyboardButton("💳 Оплатить 2 900 руб", url=YOOMONEY_BOX),
         types.InlineKeyboardButton("✅ Я оплатил(а)", callback_data="paid_box")
     )
     bot.send_message(
         message.chat.id,
         "📦 *Коробка для голодания*\n\n"
         "Всё необходимое для курса голодания в одной коробке.\n"
-        "Доставка по всей России.\n\n"
-        "Стоимость: *2 000 руб* + доставка\n\n"
+        "Доставка по всей России через СДЭК.\n\n"
+        "Стоимость: *2 900 руб* + доставка\n\n"
         "1️⃣ Нажмите *«Оплатить»* — откроется форма оплаты\n"
         "2️⃣ Оплатите картой или из кошелька\n"
         "3️⃣ Вернитесь сюда и нажмите *«Я оплатил(а)»*\n\n"
@@ -138,18 +142,16 @@ def contact(message):
 def paid_course(call):
     user = call.from_user
     username = f"@{user.username}" if user.username else f"{user.first_name}"
-    
-    # Уведомляем тебя
+
     bot.send_message(
         ADMIN_ID,
         f"💰 *ОПЛАТА КУРСА!*\n\n"
         f"👤 Клиент: {username}\n"
         f"🆔 ID: `{user.id}`\n"
-        f"💵 Сумма: 2 900 руб\n\n"
+        f"💵 Сумма: 3 900 руб\n\n"
         f"✅ Видео отправлено автоматически!",
         parse_mode="Markdown")
-    
-    # Отправляем видео СРАЗУ автоматически
+
     bot.answer_callback_query(call.id, "Отправляем видеокурс!")
     bot.send_message(
         call.message.chat.id,
@@ -157,10 +159,16 @@ def paid_course(call):
         parse_mode="Markdown",
         reply_markup=get_main_keyboard())
     try:
-        bot.send_document(
+        bot.send_video(
             user.id,
-            VIDEO_FILE_ID,
-            caption="🎬 Видеокурс: Голодание с улыбкой\nДоктор Александров")
+            VIDEO_SHORT_FILE_ID,
+            caption="🎬 *Вводное видео — краткий обзор курса*\nДоктор Александров",
+            parse_mode="Markdown")
+        bot.send_video(
+            user.id,
+            VIDEO_FULL_FILE_ID,
+            caption="📚 *Полный курс с расшифровкой и пояснениями*\nДоктор Александров",
+            parse_mode="Markdown")
         bot.send_message(
             user.id,
             "🎉 *Добро пожаловать в закрытый клуб!*\n\n"
@@ -184,7 +192,7 @@ def paid_box(call):
         f"💰 *НОВАЯ ОПЛАТА КОРОБКИ!*\n\n"
         f"👤 Клиент: {username}\n"
         f"🆔 ID: `{user.id}`\n"
-        f"💵 Сумма: 2 490 руб\n\n"
+        f"💵 Сумма: 2 900 руб\n\n"
         f"Проверьте поступление на ЮMoney и нажмите кнопку:",
         parse_mode="Markdown",
         reply_markup=markup_admin)
@@ -274,11 +282,14 @@ def reject_payment(call):
         message_id=call.message.message_id,
         text=f"❌ Отклонено для {user_id}")
 
+
 @bot.message_handler(content_types=['video', 'document'])
 def get_file_id(message):
     if message.from_user.id == ADMIN_ID:
         fid = message.video.file_id if message.video else message.document.file_id
         bot.send_message(ADMIN_ID, f"`{fid}`", parse_mode="Markdown")
+
+
 @bot.message_handler(func=lambda message: True)
 def handle_text(message):
     user = message.from_user
