@@ -2,46 +2,23 @@ import telebot
 from telebot import types
 import os
 from threading import Thread
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import HTTPServer, BaseHTTPRequestHandler
 import time
 from urllib.request import urlopen
+import hashlib
+import hmac
+from urllib.parse import parse_qs
 
 BOT_TOKEN = os.environ['BOT_TOKEN']
+YOOMONEY_SECRET = os.environ['YOOMONEY_SECRET']
 ADMIN_ID = 75271120
 
 VIDEO_SHORT_FILE_ID = "BAACAgIAAxkBAAPbac2AEGt9Cq9W7kTFgBvtnGCK-eAAAtOPAAL3GHBKfKndY7V27MM6BA"
-VIDEO_FULL_FILE_ID = "BAACAgIAAxkBAAPWac1w70dDBbzInRVOEstQwJZzTIUAAhu2AAL3GGhKVGZsJtSHGnY6BA"
-
-YOOMONEY_COURSE = "https://yoomoney.ru/quickpay/confirm?receiver=4100118420031768&quickpay-form=donate&sum=3900&label=course"
-YOOMONEY_BOX = "https://yoomoney.ru/quickpay/confirm?receiver=4100118420031768&quickpay-form=donate&sum=2900&label=box"
+VIDEO_FULL_FILE_ID = "BAACAgIAAxkBAAPWac1w70dDBbzInRVOEstQwJZzTIUAAhu2AAL3GHhKVGZsJtSHGnY6BA"
 
 bot = telebot.TeleBot(BOT_TOKEN)
 pending_payments = {}
 delivery_data = {}
-
-class MyHandler(SimpleHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"Bot is running!")
-    def log_message(self, format, *args):
-        pass
-
-def run_server():
-    server = HTTPServer(('0.0.0.0', 8080), MyHandler)
-    server.serve_forever()
-
-Thread(target=run_server, daemon=True).start()
-
-def self_ping():
-    while True:
-        time.sleep(240)
-        try:
-            urlopen("http://localhost:8080")
-        except:
-            pass
-
-Thread(target=self_ping, daemon=True).start()
 
 
 def get_main_keyboard():
@@ -51,6 +28,128 @@ def get_main_keyboard():
                types.KeyboardButton("📢 Новости"),
                types.KeyboardButton("✉️ Написать автору"))
     return markup
+
+
+def send_course(user_id):
+    try:
+        bot.send_message(
+            user_id,
+            "✅ *Оплата подтверждена! Отправляем видеокурс...*",
+            parse_mode="Markdown",
+            reply_markup=get_main_keyboard())
+        bot.send_video(
+            user_id,
+            VIDEO_SHORT_FILE_ID,
+            caption="🎬 *Вводное видео — краткий обзор курса*\nДоктор Александров",
+            parse_mode="Markdown")
+        bot.send_video(
+            user_id,
+            VIDEO_FULL_FILE_ID,
+            caption="📚 *Полный курс с расшифровкой и пояснениями*\nДоктор Александров",
+            parse_mode="Markdown")
+        bot.send_message(
+            user_id,
+            "🎉 *Добро пожаловать в закрытый клуб!*\n\n"
+            "💬 Присоединяйтесь к нашему сообществу:\n\n"
+            "👉 https://t.me/+ROlmZP7pM2w4OWFi",
+            parse_mode="Markdown")
+        bot.send_message(
+            ADMIN_ID,
+            f"✅ *Курс автоматически отправлен!*\n🆔 ID: `{user_id}`",
+            parse_mode="Markdown")
+    except Exception as e:
+        bot.send_message(ADMIN_ID, f"⚠️ Ошибка отправки курса для {user_id}: {e}")
+
+
+def check_yoomoney_hash(data: dict, secret: str) -> bool:
+    keys = [
+        "notification_type", "operation_id", "amount",
+        "currency", "datetime", "sender",
+        "codepro", "notification_secret", "label"
+    ]
+    values = "&".join(str(data.get(k, [""])[0]) if isinstance(data.get(k), list)
+                      else str(data.get(k, "")) for k in keys)
+    # Заменяем notification_secret на реальный секрет
+    values = values.replace(
+        str(data.get("notification_secret", [""])[0]) if isinstance(
+            data.get("notification_secret"), list) else str(data.get("notification_secret", "")),
+        secret
+    )
+    expected = hashlib.sha1(values.encode("utf-8")).hexdigest()
+    received = data.get("sha1_hash", [""])[0] if isinstance(
+        data.get("sha1_hash"), list) else data.get("sha1_hash", "")
+    return expected == received
+
+
+class MyHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is running!")
+
+    def do_POST(self):
+        if self.path == "/payment":
+            length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(length).decode("utf-8")
+            data = parse_qs(body)
+
+            if check_yoomoney_hash(data, YOOMONEY_SECRET):
+                label = data.get("label", [""])[0]
+                amount = data.get("amount", ["0"])[0]
+
+                if label.startswith("course_"):
+                    user_id = int(label.split("_")[1])
+                    Thread(target=send_course, args=(user_id,)).start()
+
+                elif label.startswith("box_"):
+                    user_id = int(label.split("_")[1])
+                    username = data.get("sender", ["неизвестен"])[0]
+                    markup_admin = types.InlineKeyboardMarkup(row_width=2)
+                    markup_admin.add(
+                        types.InlineKeyboardButton(
+                            "✅ Подтвердить", callback_data=f"confirm_box_{user_id}"),
+                        types.InlineKeyboardButton(
+                            "❌ Отклонить", callback_data=f"reject_{user_id}"))
+                    bot.send_message(
+                        ADMIN_ID,
+                        f"💰 *ОПЛАТА КОРОБКИ ПОЛУЧЕНА!*\n\n"
+                        f"🆔 ID: `{user_id}`\n"
+                        f"💵 Сумма: {amount} руб\n\n"
+                        f"Нажмите подтвердить для оформления доставки:",
+                        parse_mode="Markdown",
+                        reply_markup=markup_admin)
+                    bot.send_message(
+                        user_id,
+                        "✅ *Оплата получена!*\n\nОжидайте подтверждения от администратора 📬",
+                        parse_mode="Markdown")
+            else:
+                bot.send_message(ADMIN_ID, "⚠️ Получен webhook с неверной подписью!")
+
+        self.send_response(200)
+        self.end_headers()
+
+    def log_message(self, format, *args):
+        pass
+
+
+def run_server():
+    server = HTTPServer(('0.0.0.0', 8080), MyHandler)
+    server.serve_forever()
+
+
+Thread(target=run_server, daemon=True).start()
+
+
+def self_ping():
+    while True:
+        time.sleep(240)
+        try:
+            urlopen("http://localhost:8080")
+        except:
+            pass
+
+
+Thread(target=self_ping, daemon=True).start()
 
 
 @bot.message_handler(commands=['start'])
@@ -86,10 +185,11 @@ def news_channel(message):
 
 @bot.message_handler(func=lambda m: m.text == "🎬 Купить видеокурс")
 def buy_course(message):
+    user_id = message.from_user.id
+    url = f"https://yoomoney.ru/quickpay/confirm?receiver=4100118420031768&quickpay-form=donate&sum=3900&label=course_{user_id}"
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(
-        types.InlineKeyboardButton("💳 Оплатить 3 900 руб", url=YOOMONEY_COURSE),
-        types.InlineKeyboardButton("✅ Я оплатил(а)", callback_data="paid_course")
+        types.InlineKeyboardButton("💳 Оплатить 3 900 руб", url=url)
     )
     bot.send_message(
         message.chat.id,
@@ -98,20 +198,20 @@ def buy_course(message):
         "⚠️ *Дисклеймер:* Материалы курса носят исключительно "
         "информационный характер и не являются медицинской рекомендацией. "
         "Перед применением проконсультируйтесь с врачом.\n\n"
-        "1️⃣ Нажмите *«Оплатить»* — откроется форма оплаты\n"
+        "1️⃣ Нажмите *«Оплатить»*\n"
         "2️⃣ Оплатите картой или из кошелька\n"
-        "3️⃣ Вернитесь сюда и нажмите *«Я оплатил(а)»*\n\n"
-        "После проверки получите видеокурс! 🎬",
+        "3️⃣ Видеокурс придёт *автоматически* сразу после оплаты! 🎬",
         parse_mode="Markdown",
         reply_markup=markup)
 
 
 @bot.message_handler(func=lambda m: m.text == "📦 Купить коробку")
 def buy_box(message):
+    user_id = message.from_user.id
+    url = f"https://yoomoney.ru/quickpay/confirm?receiver=4100118420031768&quickpay-form=donate&sum=2900&label=box_{user_id}"
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(
-        types.InlineKeyboardButton("💳 Оплатить 2 900 руб", url=YOOMONEY_BOX),
-        types.InlineKeyboardButton("✅ Я оплатил(а)", callback_data="paid_box")
+        types.InlineKeyboardButton("💳 Оплатить 2 900 руб", url=url)
     )
     bot.send_message(
         message.chat.id,
@@ -119,10 +219,9 @@ def buy_box(message):
         "Всё необходимое для курса голодания в одной коробке.\n"
         "Доставка по всей России через СДЭК.\n\n"
         "Стоимость: *2 900 руб* + доставка\n\n"
-        "1️⃣ Нажмите *«Оплатить»* — откроется форма оплаты\n"
+        "1️⃣ Нажмите *«Оплатить»*\n"
         "2️⃣ Оплатите картой или из кошелька\n"
-        "3️⃣ Вернитесь сюда и нажмите *«Я оплатил(а)»*\n\n"
-        "После этого укажем адрес доставки 📬",
+        "3️⃣ После оплаты попросим адрес доставки 📬",
         parse_mode="Markdown",
         reply_markup=markup)
 
@@ -134,72 +233,6 @@ def contact(message):
         message.chat.id,
         "✉️ *Напишите ваше сообщение:*\n\n"
         "Просто отправьте текст — доктор Александров получит его и ответит!",
-        parse_mode="Markdown",
-        reply_markup=get_main_keyboard())
-
-
-@bot.callback_query_handler(func=lambda call: call.data == "paid_course")
-def paid_course(call):
-    user = call.from_user
-    username = f"@{user.username}" if user.username else f"{user.first_name}"
-
-    bot.send_message(
-        ADMIN_ID,
-        f"💰 *ОПЛАТА КУРСА!*\n\n"
-        f"👤 Клиент: {username}\n"
-        f"🆔 ID: `{user.id}`\n"
-        f"💵 Сумма: 3 900 руб\n\n"
-        f"✅ Видео отправлено автоматически!",
-        parse_mode="Markdown")
-
-    bot.answer_callback_query(call.id, "Отправляем видеокурс!")
-    bot.send_message(
-        call.message.chat.id,
-        "✅ *Спасибо за оплату!*\n\n🎬 Отправляем ваш видеокурс...",
-        parse_mode="Markdown",
-        reply_markup=get_main_keyboard())
-    try:
-        bot.send_video(
-            user.id,
-            VIDEO_SHORT_FILE_ID,
-            caption="🎬 *Вводное видео — краткий обзор курса*\nДоктор Александров",
-            parse_mode="Markdown")
-        bot.send_video(
-            user.id,
-            VIDEO_FULL_FILE_ID,
-            caption="📚 *Полный курс с расшифровкой и пояснениями*\nДоктор Александров",
-            parse_mode="Markdown")
-        bot.send_message(
-            user.id,
-            "🎉 *Добро пожаловать в закрытый клуб!*\n\n"
-            "💬 Присоединяйтесь к нашему сообществу:\n\n"
-            "👉 https://t.me/+ROlmZP7pM2w4OWFi",
-            parse_mode="Markdown")
-    except Exception as e:
-        bot.send_message(ADMIN_ID, f"⚠️ Ошибка отправки видео: {e}")
-
-
-@bot.callback_query_handler(func=lambda call: call.data == "paid_box")
-def paid_box(call):
-    user = call.from_user
-    username = f"@{user.username}" if user.username else f"{user.first_name}"
-    markup_admin = types.InlineKeyboardMarkup(row_width=2)
-    markup_admin.add(
-        types.InlineKeyboardButton("✅ Подтвердить", callback_data=f"confirm_box_{user.id}"),
-        types.InlineKeyboardButton("❌ Отклонить", callback_data=f"reject_{user.id}"))
-    bot.send_message(
-        ADMIN_ID,
-        f"💰 *НОВАЯ ОПЛАТА КОРОБКИ!*\n\n"
-        f"👤 Клиент: {username}\n"
-        f"🆔 ID: `{user.id}`\n"
-        f"💵 Сумма: 2 900 руб\n\n"
-        f"Проверьте поступление на ЮMoney и нажмите кнопку:",
-        parse_mode="Markdown",
-        reply_markup=markup_admin)
-    bot.answer_callback_query(call.id, "Заявка отправлена!")
-    bot.send_message(
-        call.message.chat.id,
-        "⏳ *Спасибо!*\n\nОплата проверяется. После подтверждения попросим адрес 📬",
         parse_mode="Markdown",
         reply_markup=get_main_keyboard())
 
