@@ -348,11 +348,14 @@ def handle_text(message):
 import threading
 
 def run_bot():
-    print("Bot started!")
+    print("Бот запустился!")
     bot.infinity_polling(timeout=60, long_polling_timeout=60)
 
 if __name__ == '__main__':
     bot_thread = threading.Thread(target=run_bot)
     bot_thread.daemon = True
     bot_thread.start()
-    app.run(host='0.0.0.0', port=8080)
+    
+    server = HTTPServer(('0.0.0.0', 8080), YooMoneyHandler)
+    print("Сервер запущен на порту 8080")
+    server.serve_forever()
