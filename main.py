@@ -87,7 +87,7 @@ class MyHandler(BaseHTTPRequestHandler):
         self.wfile.write(b"Bot is running!")
 
     def do_POST(self):
-        if self.path == "/payment":
+        if self.path == "/yoomoney":
             length = int(self.headers.get('Content-Length', 0))
             body = self.rfile.read(length).decode("utf-8")
             data = parse_qs(body)
@@ -352,10 +352,12 @@ def run_bot():
     bot.infinity_polling(timeout=60, long_polling_timeout=60)
 
 if __name__ == '__main__':
+    import socket
     bot_thread = threading.Thread(target=run_bot)
     bot_thread.daemon = True
     bot_thread.start()
     
     server = HTTPServer(('0.0.0.0', 8080), MyHandler)
+    server.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     print("Сервер запущен на порту 8080")
     server.serve_forever()
