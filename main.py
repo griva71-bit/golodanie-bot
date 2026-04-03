@@ -356,6 +356,6 @@ if __name__ == '__main__':
     bot_thread.daemon = True
     bot_thread.start()
     
-    server = HTTPServer(('0.0.0.0', 8080), YooMoneyHandler)
+    server = HTTPServer(('0.0.0.0', 8080), MyHandler)
     print("Сервер запущен на порту 8080")
     server.serve_forever()
