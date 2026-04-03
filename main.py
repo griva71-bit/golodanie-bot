@@ -3,12 +3,11 @@ from telebot import types
 import os
 from threading import Thread
 from http.server import HTTPServer, BaseHTTPRequestHandler
-import socketserver
 import time
 from urllib.request import urlopen
 import hashlib
-import hmac
 from urllib.parse import parse_qs
+import threading
 
 BOT_TOKEN = os.environ['BOT_TOKEN']
 YOOMONEY_SECRET = os.environ['YOOMONEY_SECRET']
@@ -78,6 +77,8 @@ def check_yoomoney_hash(data: dict, secret: str) -> bool:
     string = "&".join(values)
     expected = hashlib.sha1(string.encode("utf-8")).hexdigest()
     received = data.get("sha1_hash", [""])[0] if isinstance(data.get("sha1_hash"), list) else data.get("sha1_hash", "")
+    print(f"Ожидаемый хэш: {expected}")
+    print(f"Полученный хэш: {received}")
     return expected == received
 
 
@@ -92,15 +93,14 @@ class MyHandler(BaseHTTPRequestHandler):
             length = int(self.headers.get('Content-Length', 0))
             body = self.rfile.read(length).decode("utf-8")
             data = parse_qs(body)
-
+            print(f"Получено уведомление ЮМани: {data}")
             if check_yoomoney_hash(data, YOOMONEY_SECRET):
+                print("Хэш прошел проверку!")
                 label = data.get("label", [""])[0]
                 amount = data.get("amount", ["0"])[0]
-
                 if label.startswith("course_"):
                     user_id = int(label.split("_")[1])
                     Thread(target=send_course, args=(user_id,)).start()
-
                 elif label.startswith("box_"):
                     user_id = int(label.split("_")[1])
                     username = data.get("sender", ["неизвестен"])[0]
@@ -123,6 +123,7 @@ class MyHandler(BaseHTTPRequestHandler):
                         "✅ *Оплата получена!*\n\nОжидайте подтверждения от администратора 📬",
                         parse_mode="Markdown")
             else:
+                print("Хэш НЕ прошел проверку!")
                 bot.send_message(ADMIN_ID, "⚠️ Получен webhook с неверной подписью!")
 
         self.send_response(200)
@@ -132,19 +133,11 @@ class MyHandler(BaseHTTPRequestHandler):
         pass
 
 
-def run_server():
-    server = HTTPServer(('0.0.0.0', 8080), MyHandler)
-    server.serve_forever()
-
-
-Thread(target=run_server, daemon=True).start()
-
-
 def self_ping():
     while True:
         time.sleep(240)
         try:
-            urlopen("http://localhost:8080")
+            urlopen("http://localhost:10000")
         except:
             pass
 
@@ -188,9 +181,7 @@ def buy_course(message):
     user_id = message.from_user.id
     url = f"https://yoomoney.ru/quickpay/confirm?receiver=4100118420031768&quickpay-form=donate&sum=3900&label=course_{user_id}"
     markup = types.InlineKeyboardMarkup(row_width=1)
-    markup.add(
-        types.InlineKeyboardButton("💳 Оплатить 3 900 руб", url=url)
-    )
+    markup.add(types.InlineKeyboardButton("💳 Оплатить 3 900 руб", url=url))
     bot.send_message(
         message.chat.id,
         "🎬 *Видеокурс Голодание с улыбкой*\n\n"
@@ -210,9 +201,7 @@ def buy_box(message):
     user_id = message.from_user.id
     url = f"https://yoomoney.ru/quickpay/confirm?receiver=4100118420031768&quickpay-form=donate&sum=2900&label=box_{user_id}"
     markup = types.InlineKeyboardMarkup(row_width=1)
-    markup.add(
-        types.InlineKeyboardButton("💳 Оплатить 2 900 руб", url=url)
-    )
+    markup.add(types.InlineKeyboardButton("💳 Оплатить 2 900 руб", url=url))
     bot.send_message(
         message.chat.id,
         "📦 *Коробка для голодания*\n\n"
@@ -346,18 +335,17 @@ def handle_text(message):
     bot.send_message(message.chat.id, "Выберите действие 👇", reply_markup=get_main_keyboard())
 
 
-import threading
-
 def run_bot():
     print("Бот запустился!")
     bot.infinity_polling(timeout=60, long_polling_timeout=60)
+
 
 if __name__ == '__main__':
     HTTPServer.allow_reuse_address = True
     bot_thread = threading.Thread(target=run_bot)
     bot_thread.daemon = True
     bot_thread.start()
-    
+
     server = HTTPServer(('0.0.0.0', 10000), MyHandler)
-    print("Сервер запущен на порту 8080")
+    print("Сервер запущен на порту 10000")
     server.serve_forever()
