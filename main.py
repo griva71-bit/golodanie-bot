@@ -16,7 +16,7 @@ ADMIN_ID = 75271120
 VIDEO_SHORT_FILE_ID = "BAACAgIAAxkBAAPbac2AEGt9Cq9W7kTFgBvtnGCK-eAAAtOPAAL3GHBKfKndY7V27MM6BA"
 VIDEO_FULL_FILE_ID = "BAACAgIAAxkBAAPWac1w70dDBbzInRVOEstQwJZzTIUAAhu2AAL3GHhKVGZsJtSHGnY6BA"
 
-bot = telebot.TeleBot(BOT_TOKEN)
+bot = telebot.TeleBot(BOT_TOKEN, skip_pending=True)
 pending_payments = {}
 delivery_data = {}
 
@@ -103,7 +103,6 @@ class MyHandler(BaseHTTPRequestHandler):
                     Thread(target=send_course, args=(user_id,)).start()
                 elif label.startswith("box_"):
                     user_id = int(label.split("_")[1])
-                    username = data.get("sender", ["неизвестен"])[0]
                     markup_admin = types.InlineKeyboardMarkup(row_width=2)
                     markup_admin.add(
                         types.InlineKeyboardButton(
