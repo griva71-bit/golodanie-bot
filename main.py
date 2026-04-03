@@ -345,5 +345,14 @@ def handle_text(message):
     bot.send_message(message.chat.id, "Выберите действие 👇", reply_markup=get_main_keyboard())
 
 
-print("Bot started!")
-bot.infinity_polling(timeout=60, long_polling_timeout=60)
+import threading
+
+def run_bot():
+    print("Bot started!")
+    bot.infinity_polling(timeout=60, long_polling_timeout=60)
+
+if __name__ == '__main__':
+    bot_thread = threading.Thread(target=run_bot)
+    bot_thread.daemon = True
+    bot_thread.start()
+    app.run(host='0.0.0.0', port=8080)
