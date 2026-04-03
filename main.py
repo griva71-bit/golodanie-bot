@@ -67,17 +67,16 @@ def check_yoomoney_hash(data: dict, secret: str) -> bool:
         "currency", "datetime", "sender",
         "codepro", "notification_secret", "label"
     ]
-    values = "&".join(str(data.get(k, [""])[0]) if isinstance(data.get(k), list)
-                      else str(data.get(k, "")) for k in keys)
-    # Заменяем notification_secret на реальный секрет
-    values = values.replace(
-        str(data.get("notification_secret", [""])[0]) if isinstance(
-            data.get("notification_secret"), list) else str(data.get("notification_secret", "")),
-        secret
-    )
-    expected = hashlib.sha1(values.encode("utf-8")).hexdigest()
-    received = data.get("sha1_hash", [""])[0] if isinstance(
-        data.get("sha1_hash"), list) else data.get("sha1_hash", "")
+    values = []
+    for k in keys:
+        if k == "notification_secret":
+            values.append(secret)
+        else:
+            v = data.get(k, [""])[0] if isinstance(data.get(k), list) else data.get(k, "")
+            values.append(str(v))
+    string = "&".join(values)
+    expected = hashlib.sha1(string.encode("utf-8")).hexdigest()
+    received = data.get("sha1_hash", [""])[0] if isinstance(data.get("sha1_hash"), list) else data.get("sha1_hash", "")
     return expected == received
 
 
