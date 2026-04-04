@@ -335,6 +335,8 @@ def handle_text(message):
 
 
 def run_bot():
+    bot.remove_webhook()
+    bot.delete_webhook(drop_pending_updates=True)
     print("Бот запустился!")
     bot.infinity_polling(timeout=60, long_polling_timeout=60)
 
